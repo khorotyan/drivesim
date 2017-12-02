@@ -1,33 +1,34 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Globalization;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class Controller : MonoBehaviour
 {
-    public Transform cityObj;
-    public Transform panelObj;
-    public Transform indicatorObj;
-    public Text feedbackText;
-    public Transform cam;
-    public GameObject blocker;
+    public Transform cityObj; // Reference to the roads
+    public Transform panelObj; // Reference to the UI
+    public Transform indicatorObj; // Reference to the intersection lines (Objects indicating legal position in intersection
+    public Text feedbackText; // Reference to the text containing the feedback
+    public Transform cam; // Reference to the camera
+    public GameObject blocker; // Reference to the UI blocker that disables UI interaction during animation
 
     [Space(10)]
 
-    public Transform car1;
-    public Transform car2;
+    public Transform car1; // Reference to the accelerating car
+    public Transform car2; // Reference to the decelerating car
+    public Transform carDef; // Reference to the car with constant speed
 
-    private InputField[] inputs = new InputField[6];
+    private InputField[] inputs = new InputField[6]; // Contains all the input fields
 
-    private float carWidth = 1.2f;
-    private bool playing = false;
-    private PhysInfo ph;
+    private float carWidth = 1.2f; // Car width for plaing "indicatorObj" in the correct place
+    private bool playing = false; // True if the animation is playing
+    private bool accelerate = true; // True if acceleration option is selected
+    private PhysInfo ph; // Contains all the physics information of an object
 
-    private float time = 0;
+    private float time = 0; // Timer indicating current time (starts whenever animation begins)
 
     private void Awake()
     {
-        ph = new PhysInfo(20, 7, 7, 2, 1, -3);
+        ph = new PhysInfo(20, 7, 7, 2, 1, -3); // Give minimum values to the physics object
 
         InitializeUI();
     }
@@ -60,8 +61,9 @@ public class Controller : MonoBehaviour
     // Configure inputfields after finishing typing
     private void SetIndValue(int id, int min, int max)
     {
-        float value = float.Parse(inputs[id].text);
+        float value = float.Parse(inputs[id].text, CultureInfo.InvariantCulture); // Get the input value from inputfield
 
+        // Check value range and correct if wrong
         if (value < min)
             value = min;
         else if (value > max)
@@ -69,6 +71,7 @@ public class Controller : MonoBehaviour
 
         inputs[id].text = value.ToString();
 
+        // Switch between the UI elements
         switch (id)
         {
             case 0:
@@ -97,11 +100,27 @@ public class Controller : MonoBehaviour
     // Update Intersection Info
     private void UpdateIntersection()
     {
+        // Update the road position and scale
         cityObj.localScale = new Vector3(ph.L, 1, ph.L);
         indicatorObj.localScale = new Vector3(1, 1, ph.L);
 
+        // Update the black lines in the intersection, their distance from the intersection is the cars width / 2
         indicatorObj.GetChild(0).transform.position = new Vector3((ph.L / 2) - carWidth, -0.45f, 0);
         indicatorObj.GetChild(1).transform.position = new Vector3((-ph.L / 2) + carWidth, -0.45f, 0);
+
+        // Update Car Info UI in the scene depending on intersection size and initial distance from it
+        if (ph.L + ph.d0 > 40)
+        {
+            car1.GetChild(0).GetComponent<TextMesh>().characterSize = 4;
+            car2.GetChild(0).GetComponent<TextMesh>().characterSize = 4;
+            carDef.GetChild(0).GetComponent<TextMesh>().characterSize = 4;
+        }
+        else if (ph.L + ph.d0 > 70)
+        {
+            car1.GetChild(0).GetComponent<TextMesh>().characterSize = 5;
+            car2.GetChild(0).GetComponent<TextMesh>().characterSize = 5;
+            carDef.GetChild(0).GetComponent<TextMesh>().characterSize = 5;
+        }
 
         UpdateCarDist();
     }
@@ -109,9 +128,12 @@ public class Controller : MonoBehaviour
     // Update the car distance from the intersection
     private void UpdateCarDist()
     {
+        // Update car positions based on the intersection size and distance from it
         car1.transform.position = new Vector3((ph.L / 2) + ph.d0, 0.5f, ph.L * 2.8f / 7);
-        car2.transform.position = new Vector3((ph.L / 2) + ph.d0, 0.5f, ph.L * 0.9f / 7);
+        car2.transform.position = new Vector3((ph.L / 2) + ph.d0, 0.5f, ph.L * 2.8f / 7);
+        carDef.transform.position = new Vector3((ph.L / 2) + ph.d0, 0.5f, ph.L * 0.9f / 7);
 
+        // Update camera information based on the intersection size and distance from it
         float camYPos = 25 + ph.L / 3 + ph.d0 / 1.5f;
         cam.position = new Vector3(6, camYPos, 20);
     }
@@ -119,36 +141,52 @@ public class Controller : MonoBehaviour
     // Tells about what can be done in the current situation
     private void GiveFeedback()
     {
+        // sa - final position if accelerate, sd - final position if decelerate
         float sa = ph.v0 * ph.Td + ph.aa * Mathf.Pow(ph.Td, 2) / 2;
         float sd = ph.v0 * ph.Td + ph.ad * Mathf.Pow(ph.Td, 2) / 2;
 
         feedbackText.text = "";
 
+        // Update text information based on the best decision
         if (sa >= ph.L + ph.d0)
         {
-            feedbackText.text += "Accelerate ! ";
+            accelerate = true;
+            feedbackText.text = "Accelerate !";
         }
-
-        if (sd <= ph.d0)
+        else if (sd <= ph.d0)
         {
-            feedbackText.text += "Decelerate !";
+            accelerate = false;
+            feedbackText.text = "Decelerate !";
         }
 
         if (feedbackText.text == "")
         {
             if (ph.L + ph.d0 - sa < sd - ph.d0)
             {
+                accelerate = true;
                 feedbackText.text = "It's better to accelerate as the remaining distance untill the end of " +
                     "intersection is smaller than the distance from the start of intersection";
             }
             else
             {
+                accelerate = false;
                 feedbackText.text = "It's better to decelerate as the distance from the start of " +
                     "intersection is smaller than the remaining distance untill the end of intersection";
             }
         }   
+
+        // Activate the car that is best fit for the situation
+        if (accelerate == true)
+        {
+            car1.gameObject.SetActive(true);
+        }
+        else
+        {
+            car2.gameObject.SetActive(true);
+        }
     }
 
+    // Animate the cars while the yellow light is active
     private void Animate()
     {
         if (playing == true)
@@ -159,11 +197,19 @@ public class Controller : MonoBehaviour
 
                 float initPos = (ph.L / 2) + ph.d0;
 
-                float sa = ph.v0 * time + ph.aa * Mathf.Pow(time, 2) / 2;
-                car1.position = new Vector3(initPos - sa, 0.5f, car1.position.z);
- 
-                float sd = ph.v0 * time + ph.ad * Mathf.Pow(time, 2) / 2;
-                car2.position = new Vector3(initPos - sd, 0.5f, car2.position.z);
+                if (accelerate == true)
+                {
+                    float sa = ph.v0 * time + ph.aa * Mathf.Pow(time, 2) / 2;
+                    car1.position = new Vector3(initPos - sa, 0.5f, car1.position.z);
+                }
+                else
+                {
+                    float sd = ph.v0 * time + ph.ad * Mathf.Pow(time, 2) / 2;
+                    car2.position = new Vector3(initPos - sd, 0.5f, car2.position.z);
+                }
+
+                float defs = ph.v0 * time;
+                carDef.position = new Vector3(initPos - defs, 0.5f, carDef.position.z);
             }
         }
     }
@@ -182,6 +228,8 @@ public class Controller : MonoBehaviour
         else
         {
             // Stop animation and return to edit mode
+            car1.gameObject.SetActive(false);
+            car2.gameObject.SetActive(false);
             UpdateCarDist();
             blocker.SetActive(false);
             feedbackText.text = "The best decision is to ...";
@@ -200,12 +248,12 @@ public class Controller : MonoBehaviour
 
 public class PhysInfo
 {
-    public float v0 = 20;
-    public float d0 = 7;
-    public float L = 7;
-    public float Td = 2;
-    public float aa = 1;
-    public float ad = 1;
+    public float v0;
+    public float d0;
+    public float L;
+    public float Td;
+    public float aa;
+    public float ad;
 
     public PhysInfo(float v0, float d0, float L, float Td, float aa, float ad)
     {
