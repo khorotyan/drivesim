@@ -25,10 +25,11 @@ public class Controller : MonoBehaviour
     private PhysInfo ph; // Contains all the physics information of an object
 
     private float time = 0; // Timer indicating current time (starts whenever animation begins)
+    private bool colChanged = false;
 
     private void Awake()
     {
-        ph = new PhysInfo(20, 7, 7, 2, 1, -3); // Give minimum values to the physics object
+        ph = new PhysInfo(KmphToMps(20), 7, 7, 2, 1, -3); // Give minimum values to the physics object
 
         InitializeUI();
     }
@@ -75,7 +76,7 @@ public class Controller : MonoBehaviour
         switch (id)
         {
             case 0:
-                ph.v0 = value;
+                ph.v0 = KmphToMps(value);
                 break;
             case 1:
                 ph.d0 = value;
@@ -138,6 +139,11 @@ public class Controller : MonoBehaviour
         cam.position = new Vector3(6, camYPos, 20);
     }
 
+
+    private float KmphToMps(float value)
+    {
+        return value * 1000 / 3600;
+    }
     // Tells about what can be done in the current situation
     private void GiveFeedback()
     {
@@ -147,18 +153,30 @@ public class Controller : MonoBehaviour
 
         feedbackText.text = "";
 
+        float D = 4 * Mathf.Pow(ph.v0, 2) + 8 * ph.ad * ph.d0;
+        float t = 0;
+
+        if (D > 0)
+            t = (-2 * ph.v0 + Mathf.Sqrt(D)) / (2 * ph.ad); // Time to reach the intersection
+
         // Update text information based on the best decision
         if (sa >= ph.L + ph.d0)
         {
             accelerate = true;
             feedbackText.text = "Accelerate !";
-        }
-        else if (sd <= ph.d0)
+        } // The speed must be 0 whenever the car approaches the intersection
+        else if (sd <= ph.d0 && (D < 0 || ph.v0 + ph.ad * t <= 0))
         {
             accelerate = false;
             feedbackText.text = "Decelerate !";
         }
+        else
+        {
+            accelerate = true;
+            feedbackText.text = "Accelerate, Ooops";
+        }
 
+        /*
         if (feedbackText.text == "")
         {
             if (ph.L + ph.d0 - sa < sd - ph.d0)
@@ -174,6 +192,7 @@ public class Controller : MonoBehaviour
                     "intersection is smaller than the remaining distance untill the end of intersection";
             }
         }   
+        */
 
         // Activate the car that is best fit for the situation
         if (accelerate == true)
@@ -191,8 +210,16 @@ public class Controller : MonoBehaviour
     {
         if (playing == true)
         {
-            if (time <= ph.Td)
+            if (time <= ph.Td + (ph.v0 / 5))
             {
+                if (time >= ph.Td && colChanged == false)
+                {
+                    feedbackText.transform.parent.GetComponent<Image>().color = new Color32(178, 34, 34, 255);
+                    feedbackText.color = new Color32(255, 255, 255, 255);
+                    feedbackText.transform.parent.GetChild(0).GetComponent<Text>().color = new Color32(255, 255, 255, 255);
+                    colChanged = true;
+                }
+
                 time += 1 * Time.deltaTime;
 
                 float initPos = (ph.L / 2) + ph.d0;
@@ -205,7 +232,11 @@ public class Controller : MonoBehaviour
                 else
                 {
                     float sd = ph.v0 * time + ph.ad * Mathf.Pow(time, 2) / 2;
-                    car2.position = new Vector3(initPos - sd, 0.5f, car2.position.z);
+
+                    if (ph.v0 + ph.ad * time > 0)
+                    {
+                        car2.position = new Vector3(initPos - sd, 0.5f, car2.position.z);
+                    }
                 }
 
                 float defs = ph.v0 * time;
@@ -233,8 +264,12 @@ public class Controller : MonoBehaviour
             UpdateCarDist();
             blocker.SetActive(false);
             feedbackText.text = "The best decision is to ...";
+            feedbackText.transform.parent.GetComponent<Image>().color = new Color32(250, 210, 1, 255);
+            feedbackText.color = new Color32(50, 50, 50, 255);
+            feedbackText.transform.parent.GetChild(0).GetComponent<Text>().color = new Color32(50, 50, 50, 255);
             time = 0;
 
+            colChanged = false;
             playing = false;
         }
     }
